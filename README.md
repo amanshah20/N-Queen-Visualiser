@@ -19,4 +19,4 @@ A dynamic web-based visualization of the N-Queens problem, built using **HTML, C
 ## 🔧 How to Run
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/n-queens-visualizer.git
+   git clone https://github.com/amanshah20/N-Queen-Visualiser
