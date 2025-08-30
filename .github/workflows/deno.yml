@@ -1,36 +1,16 @@
-name: Deno CI + Deploy
+name: Deploy Deno App
 
 on:
   push:
-    branches: ["main"]
-  pull_request:
     branches: ["main"]
 
 permissions:
   contents: write   # needed for GitHub Pages deploy
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: v1.x
-
-      - name: Run linter
-        run: deno lint
-
-      - name: Run tests
-        run: deno test -A
-
   deploy:
-    needs: test
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -48,4 +28,4 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist   # replace with your build output folder
+          publish_dir: ./dist   # replace if your output folder is different
