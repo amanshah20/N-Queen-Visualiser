@@ -1,0 +1,31 @@
+name: Deploy Deno App
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write   # needed for GitHub Pages deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      # Build your site (replace with your actual build command)
+      - name: Build site
+        run: deno task build
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist   # replace if your output folder is different
