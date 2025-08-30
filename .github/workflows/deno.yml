@@ -1,4 +1,4 @@
-name: Deno CI/CD
+name: Deno CI + Deploy
 
 on:
   push:
@@ -7,14 +7,14 @@ on:
     branches: ["main"]
 
 permissions:
-  contents: write   # needed for deployment to GitHub Pages
+  contents: write   # needed for GitHub Pages deploy
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Setup Deno
@@ -29,11 +29,10 @@ jobs:
         run: deno test -A
 
   deploy:
-    needs: test   # deploy only if tests pass
+    needs: test
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Setup Deno
@@ -41,19 +40,12 @@ jobs:
         with:
           deno-version: v1.x
 
-      # Build step - adjust based on your project setup
-      # If you have a deno.json task like `"build": "deno task build"`, use that
-      - name: Build project
-        run: |
-          if [ -f deno.json ]; then
-            deno task build
-          else
-            mkdir dist
-            cp -r * dist/
-          fi
+      # Build your site (replace with your actual build command)
+      - name: Build site
+        run: deno task build
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist   # change if your build output is different
+          publish_dir: ./dist   # replace with your build output folder
