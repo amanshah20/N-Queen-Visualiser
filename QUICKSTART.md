@@ -1,54 +1,105 @@
-# Quick Start Guide - N-Queen Visualiser Deployment
+# Quick Start Guide — N-Queen Visualiser
 
-## 🎯 Choose Your Path
+This Quick Start shows three paths: run locally with Docker, deploy to AWS (Terraform + Ansible), or use the included one-command deploy script. Each path is step-by-step and uses bash (your default shell: `bash.exe`). Windows users should prefer running Ansible from WSL (Ubuntu) — notes are included.
 
-### Path 1: Test Locally (5 minutes)
+## Summary links
+- Local app: http://localhost:8080
+- Remote app (after AWS deploy): http://$INSTANCE_IP:8080
+- Nagios dashboard (after Nagios playbook): http://$INSTANCE_IP/nagios4
+
+> Default Nagios credentials created by the playbook:
+- Username: `nagiosadmin`
+- Password: `admin123`
+
+## Prerequisites (quick)
+- Git
+- Docker & docker-compose
+- Terraform (for AWS path)
+- Ansible (run from WSL on Windows)
+- AWS CLI configured (`aws configure`)
+- SSH key pair (private key at `~/.ssh/id_rsa` recommended)
+
+If any of the above are missing, install them first. On Windows, use WSL for Ansible and any Linux-like commands.
+
+---
+
+## Path 1 — Run locally (fast, ~5 minutes)
+
+1. Clone the repo and change directory:
+
 ```bash
-# Build and run with Docker
+git clone https://github.com/amanshah20/N-Queen-Visualiser.git
+cd N-Queen-Visualiser
+```
+
+2. Start the app with Docker Compose:
+
+```bash
 docker-compose up -d
-
-# Open browser
+# Wait a couple seconds, then open:
 http://localhost:8080
+```
 
-# Stop when done
+3. When finished, stop the containers:
+
+```bash
 docker-compose down
 ```
 
-### Path 2: Deploy to AWS (15 minutes)
+Notes:
+- The local `docker-compose.yml` maps port 3000 -> 80. If you don't see the app at 8080, try http://localhost:3000.
 
-#### Step 1: Prerequisites Check
+---
+
+## Path 2 — Deploy to AWS (Terraform + Ansible) — detailed steps (~15–20 minutes)
+
+This path provisions an EC2 instance, deploys the Dockerized app onto it, and installs Nagios for monitoring.
+
+### 0) Notes about Windows + WSL
+- If you are on Windows, run the Terraform commands from your current shell, but run Ansible from WSL/Ubuntu to avoid SSH issues. Paths shown use POSIX style; in WSL your home is `~`.
+
+### 1) Configure AWS CLI
+
 ```bash
-# Check if tools are installed
-docker --version
-terraform --version
-ansible --version
-aws --version
-
-# Configure AWS credentials
 aws configure
+# Enter your Access Key, Secret, preferred region (e.g. us-east-1) and json output
 ```
 
-#### Step 2: Generate SSH Key (if needed)
+### 2) (Optional) Generate SSH key
+
+If you don't have an SSH key at `~/.ssh/id_rsa`:
+
 ```bash
 ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
 ```
 
-#### Step 3: Deploy with Terraform
+Make sure the public key path is referenced by Terraform (`terraform/variables.tf` uses `public_key_path`).
+
+### 3) Provision infrastructure with Terraform
+
+Run from the `terraform` folder:
+
 ```bash
 cd terraform
 terraform init
 terraform apply -auto-approve
+```
 
-# Save the output IP
+When complete, capture the instance IP into an env var (bash):
+
+```bash
 export INSTANCE_IP=$(terraform output -raw instance_public_ip)
 echo "Instance IP: $INSTANCE_IP"
 ```
 
-#### Step 4: Update Ansible Inventory
+If `terraform output` does not return `instance_public_ip`, run `terraform output` to see available outputs.
+
+### 4) Update the Ansible inventory
+
+Switch to the `ansible` directory and create/update `inventory.ini` using the IP from Terraform:
+
 ```bash
 cd ../ansible
-
-# Replace <INSTANCE_IP> with your actual IP
 cat > inventory.ini <<EOF
 [webservers]
 ec2-instance ansible_host=$INSTANCE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
@@ -56,107 +107,118 @@ ec2-instance ansible_host=$INSTANCE_IP ansible_user=ubuntu ansible_ssh_private_k
 [webservers:vars]
 ansible_python_interpreter=/usr/bin/python3
 EOF
+
+# Quick test (from WSL if Windows):
+ansible -i inventory.ini webservers -m ping
 ```
 
-#### Step 5: Deploy Application
+If the ping fails, wait ~30–60s for the instance to finish booting and try again.
+
+### 5) Deploy the application with Ansible
+
+From the `ansible` folder run:
+
 ```bash
-# Wait 30 seconds for instance to be ready
+# Wait a short time for SSH to be ready
 sleep 30
 
-# Deploy with Ansible
-ansible-playbook deploy.yml
+ansible-playbook -i inventory.ini deploy.yml
 ```
 
-#### Step 6: Access Your App
+What the playbook does:
+- Installs Docker and docker-compose on the EC2 instance
+- Copies the project files and Dockerfile
+- Builds the Docker image and runs the container mapping port 8080
+
+### 6) (Optional) Install Nagios monitoring
+
+To install Nagios and a basic check for the app, run:
+
 ```bash
-echo "Application URL: http://$INSTANCE_IP:8080"
-# Open this URL in your browser
+ansible-playbook -i inventory.ini nagios.yml
 ```
 
-### Path 3: One-Command Deploy (Automated)
+The Nagios playbook:
+- Installs `nagios4`, `nagios-plugins`, and `apache2` pieces
+- Creates the `nagiosadmin` user with password `admin123` (can be changed in the playbook)
+- Adjusts the Apache config so Nagios is reachable from external hosts
+
+### 7) Accessing the app and Nagios
+
+- App URL: http://$INSTANCE_IP:8080
+- Nagios URL: http://$INSTANCE_IP/nagios4
+
+Nagios default credentials:
+- Username: `nagiosadmin`
+- Password: `admin123`
+
+If you don't see pages, check the EC2 security group allows ports 22, 80 and 8080.
+
+---
+
+## Path 3 — One-command deploy (convenient)
+
+There is a `deploy.sh` script to automate the full flow. Use it from bash (it will prompt a menu):
+
 ```bash
-# Make executable
 chmod +x deploy.sh
-
-# Run and select option 2 or 3
 ./deploy.sh
 ```
 
-## 🧪 Testing Your Deployment
+Menu options include: test locally, deploy to AWS, full deployment (local then AWS), and destroy infra.
 
-### Local
+---
+
+## Testing after deployment
+
+Local test:
+
 ```bash
 curl http://localhost:8080
 ```
 
-### AWS
+Remote test (replace `<EC2_IP>` with your instance IP):
+
 ```bash
-curl http://<YOUR_EC2_IP>:8080
+curl http://$INSTANCE_IP:8080
+curl http://$INSTANCE_IP/nagios4  # Nagios page
 ```
 
-## 🧹 Clean Up
+---
 
-### Stop Local
+## Cleanup
+
+Stop local containers:
+
 ```bash
 docker-compose down
 ```
 
-### Destroy AWS Resources
+Destroy AWS resources (from `terraform` dir):
+
 ```bash
 cd terraform
 terraform destroy -auto-approve
 ```
 
-## ⚠️ Common Issues
-
-### Issue 1: AWS Credentials Not Found
-```bash
-aws configure
-# Enter: Access Key ID, Secret Access Key, Region (us-east-1), Output (json)
-```
-
-### Issue 2: SSH Connection Refused
-```bash
-# Wait 60 seconds and try again
-# EC2 instance needs time to boot
-```
-
-### Issue 3: Port 8080 Not Accessible
-```bash
-# Check security group in AWS Console
-# Ensure port 8080 is open to 0.0.0.0/0
-```
-
-### Issue 4: Docker Build Fails
-```bash
-# Check if Docker daemon is running
-docker info
-
-# Restart Docker service
-sudo systemctl restart docker  # Linux
-# or restart Docker Desktop     # Windows/Mac
-```
-
-## 📊 Cost Estimate
-
-- **EC2 t2.micro**: Free tier eligible (750 hours/month)
-- **Storage**: ~$1/month for 20GB
-- **Data Transfer**: Free tier includes 15GB/month
-
-**Total**: $0-1/month (if within free tier)
-
-## 🎓 What You Just Built
-
-1. ✅ Dockerized web application
-2. ✅ AWS VPC with public subnet
-3. ✅ EC2 instance with Docker
-4. ✅ Automated deployment pipeline
-5. ✅ Infrastructure as Code (Terraform)
-6. ✅ Configuration Management (Ansible)
-
-## 📞 Need Help?
-
-Check the full [DEPLOYMENT.md](DEPLOYMENT.md) for detailed troubleshooting.
+If you used the `deploy.sh`, you can also select its destroy option.
 
 ---
-**Enjoy your N-Queen Visualiser! 🎉**
+
+## Common issues & quick fixes
+
+- SSH connection refused: wait 30–60s and re-run `ansible -i inventory.ini webservers -m ping`. Verify `~/.ssh/id_rsa` permissions (chmod 600).
+- Firewall / Security group: ensure ports 22, 80 and 8080 are allowed.
+- Nagios Forbidden page: the playbook updates `/etc/apache2/conf-available/nagios4-cgi.conf` to `Require all granted` and restarts Apache. If still Forbidden, ssh into the server and inspect `/var/log/apache2/error.log`.
+- Ansible on Windows: use WSL for reliable SSH behavior.
+
+---
+
+## Where to look next
+- Full deployment and troubleshooting: see `DEPLOYMENT.md`.
+- Ansible playbooks: `ansible/deploy.yml`, `ansible/nagios.yml`.
+- Infrastructure: `terraform/main.tf`, `terraform/outputs.tf`.
+
+---
+
+Enjoy your N-Queen Visualiser! 🎉
